@@ -31,6 +31,128 @@ from .build import BACKBONE_REGISTRY
 
 logger = logging.getLogger(__name__)
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class PredictorLG(nn.Module):
+    """
+    Score Predictor for Visual Token Selection
+    Predicts the importance scores for each token.
+    """
+    def __init__(self, embed_dim):
+        """
+        Args:
+            embed_dim (int): Embedding dimension of each token.
+        """
+        super(PredictorLG, self).__init__()
+        self.in_conv = nn.Sequential(
+            nn.LayerNorm(embed_dim),
+            nn.Linear(embed_dim, embed_dim // 2, bias=False),
+            nn.GELU()
+        )
+        self.out_conv = nn.Sequential(
+            nn.Linear(embed_dim // 2, 1, bias=False),
+            nn.Tanh()  # Output scores in range [-1, 1]
+        )
+
+    def forward(self, x):
+        """
+        Args:
+            x (torch.Tensor): Input token embeddings of shape (batch_size, num_tokens, embed_dim).
+        
+        Returns:
+            torch.Tensor: Predicted scores of shape (batch_size, num_tokens).
+        """
+        x = self.in_conv(x)  # Shape: (batch_size, num_tokens, embed_dim // 2)
+        scores = self.out_conv(x).squeeze(-1)  # Shape: (batch_size, num_tokens)
+        return scores
+
+
+class PerturbedTopK(nn.Module):
+    """
+    Perturbed Top-K Token Selection
+    Adds noise to token scores for robust top-k selection.
+    """
+    def __init__(self, topk, num_samples=500, sigma=0.05):
+        """
+        Args:
+            topk (int): Number of tokens to select.
+            num_samples (int): Number of noise samples for perturbation.
+            sigma (float): Standard deviation of noise.
+        """
+        super(PerturbedTopK, self).__init__()
+        self.topk = topk
+        self.num_samples = num_samples
+        self.sigma = sigma
+    
+    def forward(self, scores):
+        """
+        Args:
+            scores (torch.Tensor): Token scores of shape (batch_size, num_tokens).
+        
+        Returns:
+            torch.Tensor: Top-k indicator matrix of shape (batch_size, topk, num_tokens).
+        """
+        B, N = scores.shape
+        noise = torch.normal(mean=0.0, std=1.0, size=(B, self.num_samples, N), device=scores.device)
+        perturbed_scores = scores.unsqueeze(1) + noise * self.sigma  # Shape: (batch_size, num_samples, num_tokens)
+
+        # Top-k selection
+        topk_indices = torch.topk(perturbed_scores, self.topk, dim=-1).indices  # Shape: (batch_size, num_samples, topk)
+        topk_indices = torch.sort(topk_indices, dim=-1).values  # Sort indices for stability
+
+        # Generate one-hot indicator
+        indicator = F.one_hot(topk_indices, num_classes=N).float()  # Shape: (batch_size, num_samples, topk, num_tokens)
+        indicator = indicator.mean(dim=1)  # Average over samples, shape: (batch_size, topk, num_tokens)
+
+        return indicator
+class VisualTokenSelection(nn.Module):
+    """
+    Visual Token Selection Module
+    This module selects the top-k most important tokens based on predicted scores.
+    """
+    def __init__(self, max_tokens, embed_dim, topk):
+        """
+        Args:
+            max_tokens (int): Maximum number of tokens in the input.
+            embed_dim (int): Embedding dimension of each token.
+            topk (int): Number of tokens to select.
+        """
+        super(VisualTokenSelection, self).__init__()
+        self.max_tokens = max_tokens
+        self.topk = topk
+        self.score_predictor = PredictorLG(embed_dim=embed_dim)
+        self.topk_selector = PerturbedTopK(topk=topk)
+    
+    def forward(self, x):
+        """
+        Args:
+            x (torch.Tensor): Input token embeddings of shape (batch_size, num_tokens, embed_dim).
+        
+        Returns:
+            torch.Tensor: Selected top-k tokens of shape (batch_size, topk, embed_dim).
+        """
+        B, L, D = x.shape
+        if L != self.max_tokens:
+            # 动态调整 max_tokens
+            self.max_tokens = L
+        assert L == self.max_tokens, f"Input token length {L} does not match max_tokens {self.max_tokens}."
+
+        # Step 1: Predict token scores
+        pred_scores = self.score_predictor(x)  # Shape: (batch_size, num_tokens)
+
+        # Step 2: Apply top-k selection
+        topk_indicator = self.topk_selector(pred_scores)  # Shape: (batch_size, topk, num_tokens)
+
+        # Step 3: Select top-k tokens
+        selected_tokens = torch.einsum("bkl,bld->bkd", topk_indicator, x)  # Shape: (batch_size, topk, embed_dim)
+
+        return selected_tokens
+
+
+
+##############################################################################################################
 
 class Mlp(nn.Module):
     def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.):
@@ -205,6 +327,7 @@ class PatchEmbed_overlap(nn.Module):
 
 
 class VisionTransformer_multiview_onebranch(nn.Module):
+    # import pdb; pdb.set_trace()
     """ Vision Transformer
         A PyTorch impl of : `An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale`
             - https://arxiv.org/abs/2010.11929
@@ -233,6 +356,8 @@ class VisionTransformer_multiview_onebranch(nn.Module):
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 2, embed_dim))
         self.cam_num = camera
         self.sie_xishu = sie_xishu
+        # VisualTokenSelection
+        self.token_selector = VisualTokenSelection(max_tokens=num_patches, embed_dim=embed_dim, topk=10)
         # Initialize SIE Embedding
         if camera > 1:
             self.sie_embed = nn.Parameter(torch.zeros(camera, 1, embed_dim))
@@ -288,6 +413,21 @@ class VisionTransformer_multiview_onebranch(nn.Module):
             # perform inner sub
             if self.inner_sub:
                 x[:, 0] = x[:, 0] - x[:, 1]
+
+        ###################################
+        # 我想在这里接上一个token selection的操作，包含token打分和排序，保持输入输出的唯独不变
+        # 1. 计算token的打分
+        # 2. 对token进行排序
+        # 3. 选择topk的token
+        # 4. 对topk的token进行排序
+        # 5. 保持输入输出的唯一不变
+        x = self.token_selector(x)
+
+        x = blk(x)
+        # perform inner sub
+        if self.inner_sub:
+            x[:, 0] = x[:, 0] - x[:, 1]
+        ###################################
 
 
         x = self.norm(x)
