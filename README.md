@@ -31,7 +31,7 @@ CUDA_VISIBLE_DEVICES=1 python3 tools/train_net.py --config-file ./configs/CARGO/
 ### Acknowledgement
 Codebase from [fast-reid](https://github.com/JDAI-CV/fast-reid). So please refer to that repository for more usage.
 
-## [1] Dataset: CARGO
+## [2] Dataset: CARGO
 ![CARGO](CARGO.jpg)
 ### Introduction
 * CARGO is a large-scale aerial-ground person re-identification (AGPReID) dataset, which captured from a synthesized scene in Unity3D.
@@ -63,14 +63,14 @@ Annotations are preserved in the name of each image by the format ``camID_time_p
 
 
 
-## [2] Citation
+## [3] Citation
 If you find this code useful for your research, please kindly cite the following papers:
 ```
-@InProceedings{Zhang_2024_CVPR,
-    author    = {Zhang, Quan and Wang, Lei and Patel, Vishal M. and Xie, Xiaohua and Lai, Jian-Huang},
-    title     = {View-decoupled Transformer for Person Re-identification under Aerial-ground Camera Network},
-    booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition},
-    year      = {2024}
-}
+@article{wang2024dynamic,
+      title={Dynamic Token Selection for Aerial-Ground Person Re-Identification},
+      author={Wang, Yuhai and Pishgar, Maryam},
+      journal={arXiv preprint arXiv:2412.00433},
+      year={2024}
+    }
 ```
 If you have any question, please feel free to contact me. E-mail: zhangq48@mail2.sysu.edu.cn
