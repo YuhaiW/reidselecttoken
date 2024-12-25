@@ -339,9 +339,9 @@ class AMPTrainer(SimpleTrainer):
         data = next(self._data_loader_iter)
         data_time = time.perf_counter() - start
 
-        with autocast():
-            loss_dict = self.model(data)
-            losses = sum(loss_dict.values())
+        # with autocast():
+        loss_dict = self.model(data)
+        losses = sum(loss_dict.values())
 
         self.optimizer.zero_grad()
         self.grad_scaler.scale(losses).backward()

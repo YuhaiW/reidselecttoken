@@ -36,6 +36,7 @@ from .wildtracker import WildTrackCrop
 from .cuhk_sysu import cuhkSYSU
 from .uavhuman import UAVHuman
 from .cargo import CARGO, CARGO_AA, CARGO_GG, CARGO_AG
+from .agreid import AG_ReID
 
 # Vehicle re-id datasets
 from .veri import VeRi

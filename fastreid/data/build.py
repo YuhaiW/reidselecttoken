@@ -43,7 +43,8 @@ def _train_loader_from_config(cfg, *, train_set=None, transforms=None, sampler=N
         for d in cfg.DATASETS.NAMES:
             data = DATASET_REGISTRY.get(d)(root=_root, **kwargs)
             if comm.is_main_process():
-                data.show_train()
+                # data.show_train()
+                print("=> Loaded {} train items".format(len(data.train)))
             train_items.extend(data.train)
 
         train_set = CommDataset(train_items, transforms, relabel=True)
@@ -115,7 +116,8 @@ def _test_loader_from_config(cfg, *, dataset_name=None, test_set=None, num_query
         assert dataset_name is not None, "dataset_name must be explicitly passed in when test_set is not provided"
         data = DATASET_REGISTRY.get(dataset_name)(root=_root, **kwargs)
         if comm.is_main_process():
-            data.show_test()
+            # data.show_test()
+            print("=> Loaded {} test items".format(len(data.query) + len(data.gallery)))
         test_items = data.query + data.gallery
         test_set = CommDataset(test_items, transforms, relabel=False)
 
