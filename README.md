@@ -1,5 +1,6 @@
-# VDT-AGPReID
-View-decoupled Transformer for Person Re-identification under Aerial-ground Camera Network (CVPR'24) [[paper_link]](https://arxiv.org/abs/2403.14513)
+# DTST-AGPReID
+Dynamic Token Selection for Aerial-Ground Person Re-Identification
+[[paper_link]](https://arxiv.org/abs/2412.00433)
 
 
 ## [1] Dataset: CARGO
