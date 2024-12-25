@@ -3,7 +3,7 @@ Dynamic Token Selection for Aerial-Ground Person Re-Identification
 [[paper_link]](https://arxiv.org/abs/2412.00433)
 
 ## [1] Method: View-decoupled Transformer
-![VDT](VDT.png)
+![VDT](Overview.png)
 ### Requirements
 #### Step1: Prepare enviorments
 Please refer to [INSTALL.md](./INSTALL.md).
